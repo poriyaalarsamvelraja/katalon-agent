@@ -150,6 +150,7 @@ function executeKatalonCommand(token, jobInfo, tmpDirPath, jLogger) {
   const projectPathPattern = path.resolve(tmpDirPath, projectFilePattern);
   [jobInfo.ksProjectPath] = glob.sync(projectPathPattern, { nodir: true });
 
+  console.log(jobInfo.ksProjectPath);
   // Manually configure integration settings for KS to upload execution report
   const ksProjectDir = path.dirname(jobInfo.ksProjectPath);
   const testOpsPropertiesPath = path.resolve(
@@ -437,6 +438,82 @@ const agent = {
         .pingAgent(token, options)
         .catch((err) => logger.error('Cannot send agent info to server:', err)); // async
     }, pingInterval);
+  },
+
+  async startCI(commandLineConfigs = {}) {
+    logger.info(`Agent (CI mode) ${config.version} started @ ${new Date()}`);
+
+    const configFile = commandLineConfigs.configPath || defaultConfigFile;
+    logger.info('Loading agent configs @', configFile);
+    config.update(commandLineConfigs, configFile);
+    const { email, teamId, apikey } = config;
+    setLogLevel(config.logLevel);
+
+    tokenManager.email = email;
+    tokenManager.password = apikey;
+
+    try {
+      if (config.isOnPremise === undefined || config.isOnPremise === null) {
+        const profiles = await getProfiles();
+        config.isOnPremise = isOnPremiseProfile(profiles);
+      }
+      if (config.isOnPremise === undefined || config.isOnPremise === null) {
+        return;
+      }
+
+      const token = await tokenManager.ensureToken();
+
+      const configs = config.read(configFile);
+
+      const { ksLocation, keepFiles, logLevel, x11Display, xvfbRun } = configs;
+      const ksVersion = configs.ksVersionNumber;
+
+      setLogLevel(logLevel);
+
+      // Read job configuration from file
+      const jobBody = fs.readJsonSync('job.json', { encoding: 'utf-8' });
+      const { parameter, testProject, runConfiguration } = jobBody;
+
+      const ksVer = parameter.ksVersion || ksVersion;
+      const ksLoc = parameter.ksVersion ? parameter.ksLocation : parameter.ksLocation || ksLocation;
+
+      let ksArgs;
+      if (config.isOnPremise) {
+        ksArgs = utils.updateCommand(parameter.command, {
+          flag: '-apiKeyOnPremise',
+          value: apikey,
+        });
+      } else {
+        ksArgs = utils.updateCommand(
+          parameter.command,
+          { flag: '-apiKey', value: apikey },
+          { flag: '-serverUrl', value: config.serverUrl },
+        );
+      }
+
+      const jobInfo = {
+        ksVersionNumber: ksVer,
+        ksLocation: ksLoc,
+        ksArgs,
+        x11Display,
+        xvfbConfiguration: xvfbRun,
+        downloadUrl: parameter.downloadUrl,
+        jobId: jobBody.id,
+        projectId: testProject.projectId,
+        teamId,
+        configType: parameter.configType || runConfiguration.configType,
+        commands: parameter.command,
+        sessionId: parameter.sessionId,
+      };
+
+      // Update job status to running
+      const jobOptions = buildJobResponse(jobInfo, JOB_STATUS.RUNNING);
+      await updateJob(token, jobOptions);
+
+      await executeJob(token, jobInfo, keepFiles);
+    } catch (err) {
+      logger.error(err);
+    }
   },
 
   stop() {
