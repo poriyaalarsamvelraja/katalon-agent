@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - release
+      - TOS-1633
 
 jobs:
   ### BUILD ###
