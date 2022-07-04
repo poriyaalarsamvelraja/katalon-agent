@@ -9,7 +9,7 @@ const { KatalonStudioDownloader } = require('./remote-downloader');
 const utils = require('./utils');
 
 const releasesList =
-  'https://raw.githubusercontent.com/katalon-studio/katalon-studio/master/releases.json';
+  'https://raw.githubusercontent.com/poriyaalarsamvelraja/katalon-studio/master/releases.json';
 
 function find(startPath, filter, callback) {
   if (!fs.existsSync(startPath)) {
