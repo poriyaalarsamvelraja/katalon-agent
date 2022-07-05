@@ -45,6 +45,7 @@ function getKsLocation(ksVersionNumber, ksLocation) {
   }
 
   return http.request(releasesList, '', {}, 'GET').then(({ body }) => {
+    console.log({body});
     const osVersion = os.getVersion();
     const ksVersion = body.find(
       (item) => item.version === ksVersionNumber && item.os === osVersion,
